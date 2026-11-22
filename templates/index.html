@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L'Étoile Reserve | Restaurant Table Reservation System (MongoDB)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body data-theme="emerald">
+
+  <!-- Top Navigation & System Status -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-section">
+        <div class="brand-logo">🍽️</div>
+        <div>
+          <h1 class="brand-title">L'Étoile Reserve</h1>
+          <p class="brand-subtitle">Fine Dining • Real-Time Table Reservation System</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Live Color Theme Selector -->
+        <div class="theme-selector-wrap" title="Change Web Page Color Palette">
+          <span class="theme-icon">🎨</span>
+          <select id="theme-selector" class="theme-select" aria-label="Select Color Theme">
+            <option value="emerald" selected>Emerald & Gold (Luxury)</option>
+            <option value="burgundy">Burgundy & Wine (Bordeaux)</option>
+            <option value="midnight">Midnight Velvet (Dark Mode)</option>
+            <option value="terracotta">Tuscan Terracotta (Warm)</option>
+            <option value="navy">Classic Royal Navy</option>
+          </select>
+        </div>
+
+        <!-- MongoDB Live Connection Status Badge -->
+        <div id="mongo-status-badge" class="mongo-badge status-checking">
+          <span class="status-dot"></span>
+          <span id="mongo-status-text">Checking MongoDB...</span>
+        </div>
+
+        <button id="btn-seed-data" class="btn btn-secondary btn-sm" title="Insert fictional sample reservations idempotently">
+          🌱 Seed Demo Data
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- KPI Summary Cards (MongoDB Aggregation $group & $sort) -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon icon-total">📋</div>
+        <div class="kpi-content">
+          <span class="kpi-label">Total Reservations</span>
+          <span id="kpi-total" class="kpi-value">-</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon icon-guests">👥</div>
+        <div class="kpi-content">
+          <span class="kpi-label">Total Guests</span>
+          <span id="kpi-guests" class="kpi-value">-</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon icon-active">✨</div>
+        <div class="kpi-content">
+          <span class="kpi-label">Confirmed / Upcoming</span>
+          <span id="kpi-active" class="kpi-value">-</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon icon-cancelled">🚫</div>
+        <div class="kpi-content">
+          <span class="kpi-label">Cancelled (Freed)</span>
+          <span id="kpi-cancelled" class="kpi-value">-</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-book">➕ New Reservation</button>
+      <button class="tab-btn" data-tab="tab-list">📅 Manage Reservations</button>
+      <button class="tab-btn" data-tab="tab-analytics">📊 MongoDB Analytics</button>
+      <button class="tab-btn" data-tab="tab-system">⚙️ DB Inspection & Info</button>
+    </nav>
+
+    <!-- TAB 1: New Reservation Form -->
+    <section id="tab-book" class="tab-content active">
+      <div class="booking-layout">
+        <!-- Form Section -->
+        <div class="card booking-card">
+          <div class="card-header">
+            <h2>Book a Table</h2>
+            <p>Every booking is stored directly as a validated document in MongoDB <code>restaurant_db.reservations</code>.</p>
+          </div>
+
+          <form id="reservation-form" novalidate>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="customer_name">Full Name *</label>
+                <input type="text" id="customer_name" name="customer_name" placeholder="e.g. Eleanor Vance" required minlength="2">
+              </div>
+
+              <div class="form-group">
+                <label for="customer_email">Email Address *</label>
+                <input type="email" id="customer_email" name="customer_email" placeholder="e.g. eleanor@example.com" required>
+              </div>
+
+              <div class="form-group">
+                <label for="customer_phone">Phone Number *</label>
+                <input type="tel" id="customer_phone" name="customer_phone" placeholder="e.g. +1-555-0199" required minlength="7">
+              </div>
+
+              <div class="form-group">
+                <label for="guests">Party Size (Guests) *</label>
+                <input type="number" id="guests" name="guests" min="1" max="20" value="2" required>
+              </div>
+
+              <div class="form-group">
+                <label for="table_number">Table Selection *</label>
+                <select id="table_number" name="table_number" required>
+                  <option value="1">Table 1 (2 Seats • Window)</option>
+                  <option value="2">Table 2 (2 Seats • Cozy Alcove)</option>
+                  <option value="3">Table 3 (4 Seats • Dining Room)</option>
+                  <option value="4" selected>Table 4 (4 Seats • Center Floor)</option>
+                  <option value="5">Table 5 (4 Seats • Patio View)</option>
+                  <option value="6">Table 6 (6 Seats • Large Booth)</option>
+                  <option value="7">Table 7 (6 Seats • Garden Side)</option>
+                  <option value="8">Table 8 (8 Seats • Chef's Table)</option>
+                  <option value="9">Table 9 (8 Seats • Private Room)</option>
+                  <option value="10">Table 10 (10 Seats • Banquet)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="reservation_time">Date & Time *</label>
+                <input type="datetime-local" id="reservation_time" name="reservation_time" required>
+              </div>
+
+              <div class="form-group">
+                <label for="duration_minutes">Duration (Minutes) *</label>
+                <select id="duration_minutes" name="duration_minutes">
+                  <option value="60">60 Minutes (Quick Dining)</option>
+                  <option value="90" selected>90 Minutes (Standard)</option>
+                  <option value="120">120 Minutes (Tasting Menu)</option>
+                  <option value="150">150 Minutes (Special Occasion)</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label for="special_requests">Special Requests / Dietary Notes</label>
+                <textarea id="special_requests" name="special_requests" rows="2" placeholder="e.g. Anniversary celebration, vegetarian menu, allergic to nuts..."></textarea>
+              </div>
+            </div>
+
+            <!-- Double-Booking Live Availability Check Bar -->
+            <div id="availability-status" class="availability-bar hidden"></div>
+
+            <div class="form-actions">
+              <button type="button" id="btn-check-availability" class="btn btn-outline">
+                🔍 Check Table Availability
+              </button>
+              <button type="submit" id="btn-submit-booking" class="btn btn-primary">
+                Confirm & Save Reservation
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Sidebar Info -->
+        <div class="card rules-card">
+          <div class="card-header">
+            <h3>MongoDB Integrity Rules</h3>
+          </div>
+          <ul class="rule-list">
+            <li>
+              <strong>JSON Schema Validation:</strong> MongoDB enforces strict types, non-null values, valid email regex, and positive integers for table & guest counts.
+            </li>
+            <li>
+              <strong>Double-Booking Prevention:</strong> Overlapping time intervals on the same table are strictly rejected via <code>$expr</code> interval comparison.
+            </li>
+            <li>
+              <strong>BSON Date Values:</strong> Dates are stored as native BSON Date objects, enabling fast <code>$gte</code> and <code>$lt</code> range indexing.
+            </li>
+            <li>
+              <strong>Compound Index:</strong> <code>(table_number, reservation_time)</code> index guarantees sub-millisecond conflict checks.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Manage Reservations -->
+    <section id="tab-list" class="tab-content">
+      <div class="card">
+        <div class="card-header flex-header">
+          <div>
+            <h2>Reservation Roster</h2>
+            <p>Live documents fetched directly from MongoDB via PyMongo.</p>
+          </div>
+          <button id="btn-refresh-list" class="btn btn-secondary btn-sm">🔄 Refresh List</button>
+        </div>
+
+        <!-- Filters & Search Toolbar -->
+        <div class="filter-bar">
+          <div class="filter-group search-filter">
+            <input type="text" id="filter-search" placeholder="Search customer, email, phone...">
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-status">Status:</label>
+            <select id="filter-status">
+              <option value="all">All Statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="seated">Seated</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-date-preset">Date Range:</label>
+            <select id="filter-date-preset">
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="tomorrow">Tomorrow</option>
+              <option value="next7">Next 7 Days</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          <div id="custom-date-container" class="filter-group hidden">
+            <input type="date" id="filter-start-date">
+            <span>to</span>
+            <input type="date" id="filter-end-date">
+          </div>
+        </div>
+
+        <!-- Reservations Table -->
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Table</th>
+                <th>Guests</th>
+                <th>Date & Time (Local / UTC)</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Special Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="reservations-tbody">
+              <tr>
+                <td colspan="8" class="text-center py-4">Loading reservations from MongoDB...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MongoDB Aggregation Analytics -->
+    <section id="tab-analytics" class="tab-content">
+      <div class="analytics-layout">
+        <div class="card">
+          <div class="card-header flex-header">
+            <div>
+              <h2>Status Distribution Aggregation</h2>
+              <p>Pipeline: <code>$group: { _id: "$status", count: { $sum: 1 }, total_guests: { $sum: "$guests" } }</code> followed by <code>$sort</code></p>
+            </div>
+            <button id="btn-refresh-analytics" class="btn btn-secondary btn-sm">🔄 Refresh Analytics</button>
+          </div>
+          <div id="analytics-status-table-container" class="table-responsive">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Table Utilization Aggregation</h2>
+            <p>Pipeline: <code>$group: { _id: "$table_number", count: { $sum: 1 }, total_guests: { $sum: "$guests" } }</code> followed by <code>$sort</code></p>
+          </div>
+          <div id="analytics-table-summary-container" class="table-responsive">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Database Inspection & Architecture Info -->
+    <section id="tab-system" class="tab-content">
+      <div class="system-grid">
+        <div class="card">
+          <div class="card-header">
+            <h2>Active MongoDB Indexes</h2>
+            <p>Inspected directly from <code>reservations.index_information()</code>.</p>
+          </div>
+          <div id="indexes-display-container">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>MongoDB Inspection Commands</h2>
+            <p>Verify documents and collection validation using <code>mongosh</code> or MongoDB Compass.</p>
+          </div>
+          <div class="code-box">
+            <pre><code># 1. Connect via mongosh
+mongosh "mongodb://localhost:27017/restaurant_db"
+
+# 2. View collection stats and document count
+use restaurant_db
+db.reservations.countDocuments()
+
+# 3. View all active indexes
+db.reservations.getIndexes()
+
+# 4. View JSON Schema validation rule
+db.getCollectionInfos({ name: "reservations" })[0].options.validator
+
+# 5. Query upcoming bookings using BSON date range
+db.reservations.find({
+  reservation_time: { $gte: new Date() }
+}).sort({ reservation_time: 1 }).pretty()
+
+# 6. Run Status Aggregation in shell
+db.reservations.aggregate([
+  { $group: { _id: "$status", count: { $sum: 1 }, guests: { $sum: "$guests" } } },
+  { $sort: { count: -1 } }
+])</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Edit Reservation Modal -->
+  <div id="edit-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Edit Reservation</h3>
+        <button id="btn-close-modal" class="btn-icon">&times;</button>
+      </div>
+      <form id="edit-reservation-form">
+        <input type="hidden" id="edit-id">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="edit-name">Customer Name</label>
+            <input type="text" id="edit-name" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-email">Email</label>
+            <input type="email" id="edit-email" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-phone">Phone</label>
+            <input type="tel" id="edit-phone" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-guests">Guests</label>
+            <input type="number" id="edit-guests" min="1" max="20" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-table">Table Number</label>
+            <input type="number" id="edit-table" min="1" max="20" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-time">Reservation Time</label>
+            <input type="datetime-local" id="edit-time" required>
+          </div>
+          <div class="form-group">
+            <label for="edit-duration">Duration (Minutes)</label>
+            <select id="edit-duration">
+              <option value="60">60 Min</option>
+              <option value="90">90 Min</option>
+              <option value="120">120 Min</option>
+              <option value="150">150 Min</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="edit-status">Status</label>
+            <select id="edit-status">
+              <option value="confirmed">Confirmed</option>
+              <option value="seated">Seated</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label for="edit-notes">Special Requests</label>
+            <textarea id="edit-notes" rows="2"></textarea>
+          </div>
+        </div>
+        <div id="edit-error-banner" class="error-banner hidden"></div>
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes to MongoDB</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <p>Restaurant Table Reservation System • MongoDB Community Server / Atlas Integration with PyMongo & Flask</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+
